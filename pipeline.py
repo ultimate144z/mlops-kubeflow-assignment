@@ -1,45 +1,42 @@
-# Main Kubeflow pipeline definition will go here
-import kfp
 from kfp import dsl
-
-# 1. Load Components from YAML files
-def load_components():
-    extract_op = kfp.components.load_component_from_file('components/extract_data.yaml')
-    preprocess_op = kfp.components.load_component_from_file('components/preprocess_data.yaml')
-    train_op = kfp.components.load_component_from_file('components/train_model.yaml')
-    evaluate_op = kfp.components.load_component_from_file('components/evaluate_model.yaml')
-    return extract_op, preprocess_op, train_op, evaluate_op
-
-# 2. Define the Pipeline
-@dsl.pipeline(
-    name='Insurance Prediction Pipeline',
-    description='A pipeline that extracts, preprocesses, trains, and evaluates a model.'
+from kfp.compiler import Compiler
+# Importing python functions directly prevents YAML version errors
+from src.pipeline_components import (
+    extract_data,
+    preprocess_data,
+    train_model,
+    evaluate_model
 )
-def insurance_pipeline():
-    extract_op, preprocess_op, train_op, evaluate_op = load_components()
 
-    # Step 1: Extract
-    extract_task = extract_op()
-
-    # Step 2: Preprocess (Takes data from Extract)
-    preprocess_task = preprocess_op(
-        input_data=extract_task.output
+@dsl.pipeline(
+    name='Insurance Prediction ML Pipeline',
+    description='End-to-end ML pipeline for medical insurance cost prediction'
+)
+def insurance_ml_pipeline():
+    # Step 1: Extract data from DVC
+    extract_task = extract_data()
+    
+    # Step 2: Preprocess data
+    preprocess_task = preprocess_data(
+        input_csv_path=extract_task.outputs['output_csv_path']
+    )
+    
+    # Step 3: Train model
+    train_task = train_model(
+        X_train_path=preprocess_task.outputs['X_train_path'],
+        y_train_path=preprocess_task.outputs['y_train_path']
+    )
+    
+    # Step 4: Evaluate model
+    evaluate_task = evaluate_model(
+        X_test_path=preprocess_task.outputs['X_test_path'],
+        y_test_path=preprocess_task.outputs['y_test_path'],
+        model_path=train_task.outputs['model_output_path']
     )
 
-    # Step 3: Train (Takes data from Preprocess)
-    train_task = train_op(
-        processed_data=preprocess_task.output
-    )
-
-    # Step 4: Evaluate (Takes model from Train and data from Preprocess)
-    evaluate_task = evaluate_op(
-        model=train_task.outputs['model_output'],
-        test_data=preprocess_task.output
-    )
-
-# 3. Compiler Step (CRITICAL for Task 4)
 if __name__ == '__main__':
-    import kfp.compiler as compiler
-    print("Compiling pipeline...")
-    compiler.Compiler().compile(insurance_pipeline, 'pipeline.yaml')
-    print("SUCCESS: pipeline.yaml generated.")
+    Compiler().compile(
+        pipeline_func=insurance_ml_pipeline,
+        package_path='pipeline.yaml'
+    )
+    print("✓ Pipeline compiled successfully to pipeline.yaml")
