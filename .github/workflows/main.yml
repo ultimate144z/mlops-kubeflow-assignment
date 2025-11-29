@@ -1,0 +1,9 @@
+# GitHub Actions workflow for CI/CD pipeline
+name: Kubeflow Pipeline CI
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      # Add more steps as needed
