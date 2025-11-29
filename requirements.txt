@@ -1,4 +1,4 @@
-kfp==1.8.22
+kfp==2.7.0
 dvc
 pandas
 scikit-learn
