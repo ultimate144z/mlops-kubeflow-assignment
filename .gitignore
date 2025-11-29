@@ -1,2 +1,8 @@
 # .gitignore for DVC cache
 .dvc/
+
+venv/
+
+__pycache__/
+
+src/__pycache__/

@@ -1,1 +1,6 @@
-# Project dependencies
+kfp==1.8.22
+dvc
+pandas
+scikit-learn
+numpy
+matplotlib
