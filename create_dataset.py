@@ -1,9 +1,8 @@
-from sklearn.datasets import fetch_california_housing
 import pandas as pd
 
-# Load
-data = fetch_california_housing(as_frame=True)
-df = data.frame
+# Download the insurance dataset from a public URL (Kaggle or GitHub mirror)
+url = "https://raw.githubusercontent.com/stedy/Machine-Learning-with-R-datasets/master/insurance.csv"
+df = pd.read_csv(url)
 
-df.to_csv("data/raw_data.csv", index=False)
-print("Dataset saved to data/raw_data.csv")
+df.to_csv("data/insurance.csv", index=False)
+print("Insurance dataset saved to data/insurance.csv")

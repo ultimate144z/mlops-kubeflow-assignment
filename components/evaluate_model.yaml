@@ -1,0 +1,108 @@
+# PIPELINE DEFINITION
+# Name: evaluate-model
+# Description: Evaluate the model and save metrics.
+# Inputs:
+#    X_test_path: str
+#    model_path: str
+#    y_test_path: str
+# Outputs:
+#    metrics_output_path: str
+components:
+  comp-evaluate-model:
+    executorLabel: exec-evaluate-model
+    inputDefinitions:
+      parameters:
+        X_test_path:
+          parameterType: STRING
+        model_path:
+          parameterType: STRING
+        y_test_path:
+          parameterType: STRING
+    outputDefinitions:
+      parameters:
+        metrics_output_path:
+          parameterType: STRING
+deploymentSpec:
+  executors:
+    exec-evaluate-model:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - evaluate_model
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'pandas' 'scikit-learn'\
+          \  &&  python3 -m pip install --quiet --no-warn-script-location 'kfp==2.15.1'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef evaluate_model(\n    X_test_path: dsl.InputPath(str),\n    y_test_path:\
+          \ dsl.InputPath(str),\n    model_path: dsl.InputPath(str),\n    metrics_output_path:\
+          \ dsl.OutputPath(str)\n):\n    \"\"\"Evaluate the model and save metrics.\"\
+          \"\"\n    import pickle\n    import json\n    from sklearn.metrics import\
+          \ mean_squared_error, r2_score\n\n    with open(X_test_path, 'rb') as f:\n\
+          \        X_test = pickle.load(f)\n    with open(y_test_path, 'rb') as f:\n\
+          \        y_test = pickle.load(f)\n    with open(model_path, 'rb') as f:\n\
+          \        model = pickle.load(f)\n\n    y_pred = model.predict(X_test)\n\n\
+          \    metrics = {\n        'mse': mean_squared_error(y_test, y_pred),\n \
+          \       'rmse': mean_squared_error(y_test, y_pred, squared=False),\n   \
+          \     'r2': r2_score(y_test, y_pred)\n    }\n\n    with open(metrics_output_path,\
+          \ 'w') as f:\n        json.dump(metrics, f, indent=2)\n\n    print(f\"\u2713\
+          \ Model evaluated - RMSE: {metrics['rmse']:.2f}, R\xB2: {metrics['r2']:.4f}\"\
+          )\n\n"
+        image: python:3.9
+pipelineInfo:
+  name: evaluate-model
+root:
+  dag:
+    outputs:
+      parameters:
+        metrics_output_path:
+          valueFromParameter:
+            outputParameterKey: metrics_output_path
+            producerSubtask: evaluate-model
+    tasks:
+      evaluate-model:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-evaluate-model
+        inputs:
+          parameters:
+            X_test_path:
+              componentInputParameter: X_test_path
+            model_path:
+              componentInputParameter: model_path
+            y_test_path:
+              componentInputParameter: y_test_path
+        taskInfo:
+          name: evaluate-model
+  inputDefinitions:
+    parameters:
+      X_test_path:
+        parameterType: STRING
+      model_path:
+        parameterType: STRING
+      y_test_path:
+        parameterType: STRING
+  outputDefinitions:
+    parameters:
+      metrics_output_path:
+        parameterType: STRING
+schemaVersion: 2.1.0
+sdkVersion: kfp-2.15.1

@@ -1,0 +1,125 @@
+# PIPELINE DEFINITION
+# Name: preprocess-data
+# Description: Preprocess the data and split into train/test sets.
+# Inputs:
+#    input_csv_path: str
+# Outputs:
+#    X_test_path: str
+#    X_train_path: str
+#    y_test_path: str
+#    y_train_path: str
+components:
+  comp-preprocess-data:
+    executorLabel: exec-preprocess-data
+    inputDefinitions:
+      parameters:
+        input_csv_path:
+          parameterType: STRING
+    outputDefinitions:
+      parameters:
+        X_test_path:
+          parameterType: STRING
+        X_train_path:
+          parameterType: STRING
+        y_test_path:
+          parameterType: STRING
+        y_train_path:
+          parameterType: STRING
+deploymentSpec:
+  executors:
+    exec-preprocess-data:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - preprocess_data
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'pandas' 'scikit-learn'\
+          \  &&  python3 -m pip install --quiet --no-warn-script-location 'kfp==2.15.1'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef preprocess_data(\n    input_csv_path: dsl.InputPath(str),\n \
+          \   X_train_path: dsl.OutputPath(str),\n    X_test_path: dsl.OutputPath(str),\n\
+          \    y_train_path: dsl.OutputPath(str),\n    y_test_path: dsl.OutputPath(str)\n\
+          ):\n    \"\"\"Preprocess the data and split into train/test sets.\"\"\"\n\
+          \    import pandas as pd\n    import pickle\n    from sklearn.model_selection\
+          \ import train_test_split\n    from sklearn.preprocessing import LabelEncoder\n\
+          \n    df = pd.read_csv(input_csv_path)\n\n    # Encode categorical variables\n\
+          \    label_encoders = {}\n    for col in ['sex', 'smoker', 'region']:\n\
+          \        le = LabelEncoder()\n        df[col] = le.fit_transform(df[col])\n\
+          \        label_encoders[col] = le\n\n    X = df.drop('charges', axis=1)\n\
+          \    y = df['charges']\n\n    X_train, X_test, y_train, y_test = train_test_split(\n\
+          \        X, y, test_size=0.2, random_state=42\n    )\n\n    # Save outputs\n\
+          \    with open(X_train_path, 'wb') as f:\n        pickle.dump(X_train, f)\n\
+          \    with open(X_test_path, 'wb') as f:\n        pickle.dump(X_test, f)\n\
+          \    with open(y_train_path, 'wb') as f:\n        pickle.dump(y_train, f)\n\
+          \    with open(y_test_path, 'wb') as f:\n        pickle.dump(y_test, f)\n\
+          \n    print(f\"\u2713 Data preprocessed: {X_train.shape[0]} train, {X_test.shape[0]}\
+          \ test samples\")\n\n"
+        image: python:3.9
+pipelineInfo:
+  name: preprocess-data
+root:
+  dag:
+    outputs:
+      parameters:
+        X_test_path:
+          valueFromParameter:
+            outputParameterKey: X_test_path
+            producerSubtask: preprocess-data
+        X_train_path:
+          valueFromParameter:
+            outputParameterKey: X_train_path
+            producerSubtask: preprocess-data
+        y_test_path:
+          valueFromParameter:
+            outputParameterKey: y_test_path
+            producerSubtask: preprocess-data
+        y_train_path:
+          valueFromParameter:
+            outputParameterKey: y_train_path
+            producerSubtask: preprocess-data
+    tasks:
+      preprocess-data:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-preprocess-data
+        inputs:
+          parameters:
+            input_csv_path:
+              componentInputParameter: input_csv_path
+        taskInfo:
+          name: preprocess-data
+  inputDefinitions:
+    parameters:
+      input_csv_path:
+        parameterType: STRING
+  outputDefinitions:
+    parameters:
+      X_test_path:
+        parameterType: STRING
+      X_train_path:
+        parameterType: STRING
+      y_test_path:
+        parameterType: STRING
+      y_train_path:
+        parameterType: STRING
+schemaVersion: 2.1.0
+sdkVersion: kfp-2.15.1

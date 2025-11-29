@@ -1,0 +1,73 @@
+# PIPELINE DEFINITION
+# Name: extract-data
+# Description: Extract data from DVC and save to CSV.
+# Outputs:
+#    output_csv_path: str
+components:
+  comp-extract-data:
+    executorLabel: exec-extract-data
+    outputDefinitions:
+      parameters:
+        output_csv_path:
+          parameterType: STRING
+deploymentSpec:
+  executors:
+    exec-extract-data:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - extract_data
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'pandas' 'scikit-learn'\
+          \ 'dvc'  &&  python3 -m pip install --quiet --no-warn-script-location 'kfp==2.15.1'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef extract_data(output_csv_path: dsl.OutputPath(str)):\n    \"\"\
+          \"Extract data from DVC and save to CSV.\"\"\"\n    import pandas as pd\n\
+          \    import subprocess\n\n    print(\"Running DVC pull to fetch dataset...\"\
+          )\n    subprocess.run([\"dvc\", \"pull\"], check=True)\n\n    df = pd.read_csv(\"\
+          data/insurance.csv\")\n    print(f\"\u2713 Data extracted: {df.shape[0]}\
+          \ rows, {df.shape[1]} columns\")\n\n    with open(output_csv_path, 'w')\
+          \ as f:\n        df.to_csv(f, index=False)\n\n"
+        image: python:3.9
+pipelineInfo:
+  name: extract-data
+root:
+  dag:
+    outputs:
+      parameters:
+        output_csv_path:
+          valueFromParameter:
+            outputParameterKey: output_csv_path
+            producerSubtask: extract-data
+    tasks:
+      extract-data:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-extract-data
+        taskInfo:
+          name: extract-data
+  outputDefinitions:
+    parameters:
+      output_csv_path:
+        parameterType: STRING
+schemaVersion: 2.1.0
+sdkVersion: kfp-2.15.1

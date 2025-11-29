@@ -1,0 +1,96 @@
+# PIPELINE DEFINITION
+# Name: train-model
+# Description: Train a Linear Regression model.
+# Inputs:
+#    X_train_path: str
+#    y_train_path: str
+# Outputs:
+#    model_output_path: str
+components:
+  comp-train-model:
+    executorLabel: exec-train-model
+    inputDefinitions:
+      parameters:
+        X_train_path:
+          parameterType: STRING
+        y_train_path:
+          parameterType: STRING
+    outputDefinitions:
+      parameters:
+        model_output_path:
+          parameterType: STRING
+deploymentSpec:
+  executors:
+    exec-train-model:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - train_model
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'pandas' 'scikit-learn'\
+          \  &&  python3 -m pip install --quiet --no-warn-script-location 'kfp==2.15.1'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef train_model(\n    X_train_path: dsl.InputPath(str),\n    y_train_path:\
+          \ dsl.InputPath(str),\n    model_output_path: dsl.OutputPath(str)\n):\n\
+          \    \"\"\"Train a Linear Regression model.\"\"\"\n    import pickle\n \
+          \   from sklearn.linear_model import LinearRegression\n\n    with open(X_train_path,\
+          \ 'rb') as f:\n        X_train = pickle.load(f)\n    with open(y_train_path,\
+          \ 'rb') as f:\n        y_train = pickle.load(f)\n\n    model = LinearRegression()\n\
+          \    model.fit(X_train, y_train)\n\n    with open(model_output_path, 'wb')\
+          \ as f:\n        pickle.dump(model, f)\n\n    print(\"\u2713 Model trained\
+          \ successfully\")\n\n"
+        image: python:3.9
+pipelineInfo:
+  name: train-model
+root:
+  dag:
+    outputs:
+      parameters:
+        model_output_path:
+          valueFromParameter:
+            outputParameterKey: model_output_path
+            producerSubtask: train-model
+    tasks:
+      train-model:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-train-model
+        inputs:
+          parameters:
+            X_train_path:
+              componentInputParameter: X_train_path
+            y_train_path:
+              componentInputParameter: y_train_path
+        taskInfo:
+          name: train-model
+  inputDefinitions:
+    parameters:
+      X_train_path:
+        parameterType: STRING
+      y_train_path:
+        parameterType: STRING
+  outputDefinitions:
+    parameters:
+      model_output_path:
+        parameterType: STRING
+schemaVersion: 2.1.0
+sdkVersion: kfp-2.15.1
